@@ -1,0 +1,8 @@
+pyyaml>=6.0
+requests>=2.31
+
+# optional, only needed if you use a `type: sql` source
+sqlalchemy>=2.0
+
+# dev / test only
+pytest>=7.0
