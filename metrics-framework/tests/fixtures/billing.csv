@@ -1,0 +1,5 @@
+period,tool,division_id,amount_usd,active_users
+2026-Q2,claude-code,payments,900,2
+2026-Q1,claude-code,payments,600,1
+2026-Q2,claude-code,platform,400,1
+2026-Q1,claude-code,platform,200,1

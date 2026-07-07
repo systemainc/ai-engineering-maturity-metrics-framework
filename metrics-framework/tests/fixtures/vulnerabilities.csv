@@ -1,0 +1,4 @@
+vuln_id,detected_at,severity,repo_id,ai_generated_code,reached_prod
+v1,2026-04-12T00:00:00,critical,r1,true,true
+v2,2026-01-18T00:00:00,high,r3,true,true
+v3,2026-04-25T00:00:00,low,r1,true,false

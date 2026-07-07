@@ -1,0 +1,5 @@
+event_id,person_id,tool,occurred_at,accepted_output
+u1,p1,claude-code,2026-04-05T09:00:00,true
+u2,p2,claude-code,2026-04-06T09:00:00,true
+u3,p4,claude-code,2026-04-02T09:00:00,true
+u4,p1,claude-code,2026-01-05T09:00:00,true

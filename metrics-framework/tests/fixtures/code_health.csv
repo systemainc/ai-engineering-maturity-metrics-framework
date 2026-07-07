@@ -1,0 +1,5 @@
+repo_id,snapshot_at,test_coverage_pct,complexity_score,dead_code_pct,dependency_freshness_pct,doc_coverage_pct
+r1,2026-04-15,62,58,12,70,40
+r3,2026-04-18,75,66,8,80,55
+r1,2026-01-15,55,52,15,60,30
+r3,2026-01-18,70,60,10,75,50

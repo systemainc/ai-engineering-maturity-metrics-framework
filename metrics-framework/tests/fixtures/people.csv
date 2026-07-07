@@ -1,0 +1,6 @@
+person_id,email,division,team,role,name
+p1,p1@x.com,payments,teamA,IC,Alice
+p2,p2@x.com,payments,teamA,IC,Bob
+p3,p3@x.com,payments,teamB,IC,Cara
+p4,p4@x.com,platform,teamC,IC,Dave
+p5,p5@x.com,platform,teamC,IC,Eve

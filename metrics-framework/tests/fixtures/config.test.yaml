@@ -1,0 +1,137 @@
+organization:
+  name: "Test Org"
+  period_current: "2026-Q2"
+  period_prior: "2026-Q1"
+
+divisions:
+  - id: payments
+    name: "Payments & Billing"
+  - id: platform
+    name: "Core Platform & Infra"
+
+sources:
+  - name: roster
+    type: csv
+    entity: person
+    path: people.csv
+    field_map: {id: person_id, email: email, division_id: division, team: team, role: role, name: name}
+
+  - name: repo_catalog
+    type: csv
+    entity: repo
+    path: repos.csv
+    field_map: {id: repo_id, name: name, division_id: division}
+
+  - name: pull_requests
+    type: csv
+    entity: pull_request
+    path: pull_requests.csv
+    field_map: {id: pr_id, repo_id: repo_id, author_id: author_id, opened_at: opened_at, merged_at: merged_at, ai_assisted: ai_assisted, ai_test_generated: ai_test_generated, ai_review_passed: ai_review_passed, lines_changed: lines_changed}
+
+  - name: deploys
+    type: csv
+    entity: deploy
+    path: deploys.csv
+    field_map: {id: deploy_id, repo_id: repo_id, deployed_at: deployed_at, environment: environment, is_prod: is_prod, status: status}
+
+  - name: incidents
+    type: csv
+    entity: incident
+    path: incidents.csv
+    field_map: {id: incident_id, opened_at: opened_at, resolved_at: resolved_at, severity: severity, repo_id: repo_id, division_id: division_id}
+
+  - name: vulnerabilities
+    type: csv
+    entity: vulnerability
+    path: vulnerabilities.csv
+    field_map: {id: vuln_id, detected_at: detected_at, severity: severity, repo_id: repo_id, ai_generated_code: ai_generated_code, reached_prod: reached_prod}
+
+  - name: ai_usage
+    type: csv
+    entity: ai_usage_event
+    path: ai_usage.csv
+    field_map: {id: event_id, person_id: person_id, tool: tool, occurred_at: occurred_at, accepted_output: accepted_output}
+
+  - name: ai_seats
+    type: csv
+    entity: ai_seat
+    path: ai_seats.csv
+    field_map: {person_id: person_id, tool: tool, provisioned: provisioned, active_last_30d: active_last_30d}
+
+  - name: billing
+    type: csv
+    entity: billing_record
+    path: billing.csv
+    field_map: {period: period, tool: tool, division_id: division_id, amount_usd: amount_usd, active_users: active_users}
+
+  - name: training
+    type: csv
+    entity: training_record
+    path: training.csv
+    field_map: {person_id: person_id, program: program, completed_at: completed_at}
+
+  - name: code_health
+    type: csv
+    entity: code_health_snapshot
+    path: code_health.csv
+    field_map: {repo_id: repo_id, snapshot_at: snapshot_at, test_coverage_pct: test_coverage_pct, complexity_score: complexity_score, dead_code_pct: dead_code_pct, dependency_freshness_pct: dependency_freshness_pct, doc_coverage_pct: doc_coverage_pct}
+
+metrics:
+  levels:
+    - {n: 1, name: Exploring}
+    - {n: 2, name: Piloting}
+    - {n: 3, name: Scaling}
+    - {n: 4, name: Optimizing}
+
+  dimensions:
+    adoption:
+      name: "AI Adoption & Fluency"
+      metrics: [weekly_active_usage, ai_pr_share, training_pct]
+      level_strategy: average
+      level_thresholds:
+        weekly_active_usage: {direction: higher, bounds: [0, 20, 50, 80]}
+        ai_pr_share:         {direction: higher, bounds: [0, 15, 30, 55]}
+        training_pct:        {direction: higher, bounds: [0, 25, 60, 85]}
+
+    flow:
+      name: "Delivery Flow"
+      metrics: [deploy_frequency_per_week, lead_time_hours, change_failure_rate_pct, mttr_hours]
+      level_strategy: average
+      level_thresholds:
+        deploy_frequency_per_week: {direction: higher, bounds: [0, 1, 3, 7]}
+        lead_time_hours:           {direction: lower,  bounds: [9999, 72, 24, 6]}
+        change_failure_rate_pct:   {direction: lower,  bounds: [100, 30, 15, 5]}
+        mttr_hours:                {direction: lower,  bounds: [999, 24, 8, 2]}
+
+    spend:
+      name: "AI Spend Efficiency"
+      metrics: [credit_utilization_pct, spend_per_active_user_usd]
+      level_strategy: average
+      level_thresholds:
+        credit_utilization_pct: {direction: higher, bounds: [0, 30, 50, 75]}
+
+    quality:
+      name: "Quality & Risk Automation"
+      metrics: [ai_test_pr_pct, ai_review_gate_pct, vulns_escaped_per_quarter]
+      level_strategy: minimum
+      level_thresholds:
+        ai_test_pr_pct:            {direction: higher, bounds: [0, 10, 25, 45]}
+        ai_review_gate_pct:        {direction: higher, bounds: [0, 20, 50, 85]}
+        vulns_escaped_per_quarter: {direction: lower,  bounds: [999, 5, 2, 1]}
+
+    health:
+      name: "Codebase Health"
+      metrics: [composite_score]
+      level_strategy: average
+      weights:
+        test_coverage: 0.30
+        complexity_coupling: 0.25
+        dead_code: 0.15
+        dependency_freshness: 0.15
+        doc_coverage: 0.15
+      level_thresholds:
+        composite_score: {direction: higher, bounds: [0, 40, 55, 70]}
+
+output:
+  json: out/test_metrics.json
+  dashboard_data_js: out/test_dashboard_data.js

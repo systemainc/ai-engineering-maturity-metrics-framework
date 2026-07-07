@@ -1,0 +1,6 @@
+person_id,tool,provisioned,active_last_30d
+p1,claude-code,true,true
+p2,claude-code,true,true
+p3,claude-code,true,false
+p4,claude-code,true,true
+p5,claude-code,true,false
