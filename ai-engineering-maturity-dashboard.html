@@ -162,10 +162,10 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-si
 <header>
   <div class="brand">AI<span class="b">Maturity</span><small>Engineering AI adoption &amp; efficiency — measurement blueprint</small></div>
   <div class="hmeta">
-    <div><b>Beacon Digital</b> · Engineering org</div>
-    <div>255 engineers · 35 teams · 5 divisions</div>
-    <div>Snapshot: Q2 2026 vs Q1 2026</div>
-    <div class="sampletag">&#9679; Illustrative sample data</div>
+    <div><b id="hOrg">Beacon Digital</b> · Engineering org</div>
+    <div id="hCounts">255 engineers · 35 teams · 5 divisions</div>
+    <div id="hPeriod">Snapshot: Q2 2026 vs Q1 2026</div>
+    <div class="sampletag" id="hSampleTag">&#9679; Illustrative sample data</div>
   </div>
 </header>
 
@@ -226,15 +226,24 @@ wire it up to real data.</p>
 </footer>
 </div>
 
+<!--
+  Optional: if a `dashboard_data.js` file sits next to this HTML file, it is loaded
+  here and sets window.DASHBOARD_DATA. That's the output of the AI Engineering
+  Maturity Framework's pipeline (see metrics-framework/README.md) — run it against
+  your own org's data sources and drop the generated file next to this one to
+  replace the illustrative sample below with your real numbers. Missing the file
+  is not an error: the browser just skips the tag and the sample data renders.
+-->
+<script src="dashboard_data.js"></script>
 <script>
-const LEVELS = [
+const LEVELS_SAMPLE = [
   {n:1, key:'l1', name:'Exploring',   desc:'Ad hoc pilots. No consistent measurement.'},
   {n:2, key:'l2', name:'Piloting',    desc:'A few teams instrumented. Early, noisy signal.'},
   {n:3, key:'l3', name:'Scaling',     desc:'Org-wide adoption. Metrics tracked routinely.'},
   {n:4, key:'l4', name:'Optimizing',  desc:'Metrics drive decisions. Continuous tuning.'},
 ];
 
-const DIMENSIONS = [
+const DIMENSIONS_SAMPLE = [
   {
     id:'adoption', name:'AI Adoption & Fluency',
     tagline:'Are engineers actually using AI tools — and how deeply?',
@@ -322,7 +331,7 @@ const PRINCIPLES = [
   {t:'A metric with no owner decays', d:'Every dimension needs a named owner who reviews it monthly. An unowned metric is the first one to go stale or get gamed.'},
 ];
 
-const DIVISIONS = [
+const DIVISIONS_SAMPLE = [
   {name:'Payments & Billing', teams:9, engineers:71,
    dims:{
      adoption:{level:4, trend:1, m:[['Weekly active usage','88%','+6pp'],['AI-assisted PR share','62%','+9pp']]},
@@ -365,6 +374,32 @@ const DIVISIONS = [
      health:{level:2, trend:-1, m:[['Composite score','45/100','−1']]},
    }},
 ];
+
+// --- live data wiring -------------------------------------------------
+// If metrics-framework/'s pipeline output (dashboard_data.js) loaded above,
+// window.DASHBOARD_DATA is set — use it for the Scorecard tab (org + division
+// numbers) while the Definitions tab always shows the static methodology text
+// from DIMENSIONS_SAMPLE, since "what a metric means" doesn't change with data.
+const LIVE = window.DASHBOARD_DATA || null;
+const LEVELS = (LIVE && LIVE.LEVELS) || LEVELS_SAMPLE;
+const DIMENSIONS = (LIVE && LIVE.DIMENSIONS) || DIMENSIONS_SAMPLE;
+const DIVISIONS = (LIVE && LIVE.DIVISIONS) || DIVISIONS_SAMPLE;
+
+if (LIVE && LIVE.meta) {
+  document.getElementById('hOrg').textContent = LIVE.meta.org;
+  document.getElementById('hCounts').textContent =
+    `${LIVE.meta.engineers} engineers · ${LIVE.meta.teams} teams · ${LIVE.meta.divisions} divisions`;
+  document.getElementById('hPeriod').textContent =
+    `Snapshot: ${LIVE.meta.periodCurrent} vs ${LIVE.meta.periodPrior}`;
+  const tag = document.getElementById('hSampleTag');
+  tag.textContent = '● Live data — metrics-framework pipeline';
+  tag.style.color = 'var(--acc)';
+  tag.style.background = 'var(--acc-bg)';
+  if (LIVE.meta.sourcesFailed) {
+    tag.textContent += ` (${LIVE.meta.sourcesFailed}/${LIVE.meta.sourcesRun} sources failed — see console)`;
+    console.warn('Data source errors:', LIVE.meta.sourceErrors);
+  }
+}
 
 function lvl(n){ return LEVELS[Math.max(0,Math.min(3,n-1))]; }
 function trendHtml(t){
@@ -456,6 +491,10 @@ function renderDivisions(){
         ${dd.m.map(row=>`<div class="mrow"><span class="k">${row[0]}</span><span class="v">${row[1]} <span style="color:var(--faint)">(${row[2]})</span></span></div>`).join('')}
       </div>`;
     }).join('');
+    const insufficient = DIMENSIONS.filter(d => dv.dims[d.id] && dv.dims[d.id].insufficientData).map(d => d.name);
+    const flagText = dv.flag || (insufficient.length
+      ? `No data yet for: ${insufficient.join(', ')}. Level shown defaults to L1 until a source is connected for ${insufficient.length > 1 ? 'these dimensions' : 'this dimension'}.`
+      : null);
     return `<div class="acc" id="acc-${idx}">
       <div class="arow" onclick="toggleAcc(${idx})">
         <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>
@@ -467,7 +506,7 @@ function renderDivisions(){
       </div>
       <div class="abody">
         <div class="dimrow">${cells}</div>
-        ${dv.flag ? `<div class="flag"><b>Coverage note:</b> ${dv.flag}</div>` : ''}
+        ${flagText ? `<div class="flag"><b>Coverage note:</b> ${flagText}</div>` : ''}
       </div>
     </div>`;
   }).join('');
@@ -475,7 +514,9 @@ function renderDivisions(){
 function toggleAcc(i){ document.getElementById('acc-'+i).classList.toggle('open'); }
 
 function renderDefs(){
-  document.getElementById('defs').innerHTML = DIMENSIONS.map((d,i)=>{
+  // Always the static methodology text, regardless of whether live data is loaded —
+  // "what a metric means and why" doesn't change when you plug in a new data source.
+  document.getElementById('defs').innerHTML = DIMENSIONS_SAMPLE.map((d,i)=>{
     const rows = d.metrics.map(m=>`<tr><td class="mname">${m.name}</td><td>${m.formula}</td><td>${m.source}</td><td class="caution">${m.caution}</td></tr>`).join('');
     const rubric = d.rubric.map((r,j)=>{
       const L = LEVELS[j];
