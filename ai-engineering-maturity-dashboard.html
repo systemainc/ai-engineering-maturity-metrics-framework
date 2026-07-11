@@ -187,7 +187,7 @@ wire it up to real data.</p>
   <div class="dimgrid" id="dimgrid"></div>
 
   <div class="radarwrap">
-    <svg id="radar" viewBox="0 0 340 300" width="340" height="300"></svg>
+    <svg id="radar" viewBox="0 0 380 310" width="380" height="310" style="overflow:visible"></svg>
     <div class="radarkey">
       <div class="rk"><span class="sw" style="background:var(--acc)"></span>Current quarter (Q2 2026)</div>
       <div class="rk"><span class="sw" style="background:var(--faint);opacity:.6"></span>Prior quarter (Q1 2026)</div>
@@ -433,12 +433,14 @@ function renderDimGrid(){
   }).join('');
 }
 
+const RADAR_SHORT_LABEL = {adoption:'Adoption', flow:'Flow', spend:'Spend', quality:'Quality', health:'Health'};
+
 function renderRadar(){
-  const cx=150, cy=150, r=110;
+  const cx=190, cy=155, r=105, labelR=130;
   const n=DIMENSIONS.length;
   const axisPts = DIMENSIONS.map((d,i)=>{
     const ang = -Math.PI/2 + i*(2*Math.PI/n);
-    return {x:cx+r*Math.cos(ang), y:cy+r*Math.sin(ang), lx:cx+(r+34)*Math.cos(ang), ly:cy+(r+34)*Math.sin(ang), ang};
+    return {x:cx+r*Math.cos(ang), y:cy+r*Math.sin(ang), lx:cx+labelR*Math.cos(ang), ly:cy+labelR*Math.sin(ang), ang};
   });
   function ptsFor(getVal){
     return DIMENSIONS.map((d,i)=>{
@@ -462,7 +464,7 @@ function renderRadar(){
   let labels='';
   axisPts.forEach((p,i)=>{
     const anchor = p.lx < cx-5 ? 'end' : (p.lx > cx+5 ? 'start' : 'middle');
-    const short = DIMENSIONS[i].name.split(' ').slice(0,2).join(' ');
+    const short = RADAR_SHORT_LABEL[DIMENSIONS[i].id] || DIMENSIONS[i].name.split(' ')[0];
     labels += `<text x="${p.lx}" y="${p.ly}" text-anchor="${anchor}" font-size="10.5" font-family="Inter, sans-serif" fill="var(--dim)" font-weight="600">${short}</text>`;
   });
   document.getElementById('radar').innerHTML = `
