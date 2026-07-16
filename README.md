@@ -31,7 +31,11 @@ deliberately left out," for the full reasoning.
 Instead, this uses a five-dimension maturity model — AI Adoption &
 Fluency, Delivery Flow (DORA's four keys), AI Spend Efficiency, Quality &
 Risk Automation, and Codebase Health — scored 1–4 (Exploring → Piloting →
-Scaling → Optimizing) per team, never per individual.
+Scaling → Optimizing), drilling down org → division → team. Team is the
+floor: there is no per-individual code path anywhere in the engine, and a
+team below a configurable size (default 3) is shown by name and headcount
+only — metrics withheld, not computed anyway — because a 2-person "team
+average" is de facto per-person data.
 
 ## Quick start
 

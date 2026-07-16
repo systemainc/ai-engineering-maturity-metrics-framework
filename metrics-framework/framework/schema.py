@@ -37,6 +37,7 @@ class Repo:
     id: str
     name: str
     division_id: Optional[str] = None
+    team: Optional[str] = None
 
 
 @dataclass

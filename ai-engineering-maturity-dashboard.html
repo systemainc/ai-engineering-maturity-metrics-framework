@@ -138,6 +138,30 @@ header{display:flex;justify-content:space-between;align-items:flex-start;gap:20p
 .flag{margin-top:11px;font-size:12px;background:var(--warn-bg);color:#7a4a08;border-radius:7px;padding:10px 12px;line-height:1.5}
 .flag b{color:#5c3805}
 
+/* team drilldown (nested inside a division's abody) */
+.teamswrap{margin-top:14px;padding-top:14px;border-top:1px dashed var(--line2)}
+.teamshead{font-family:var(--disp);font-weight:700;font-size:12.5px;letter-spacing:.02em;text-transform:uppercase;
+  color:var(--dim);margin-bottom:9px;display:flex;align-items:baseline;gap:8px}
+.teamshead .c{font-family:var(--body);font-weight:500;text-transform:none;letter-spacing:0;font-size:11.5px;color:var(--faint)}
+.subacc{background:var(--panel2);border:1px solid var(--line2);border-left:2px solid var(--seg,var(--acc2));
+  border-radius:8px;margin-bottom:7px;margin-left:8px;overflow:hidden;transition:box-shadow .15s}
+.subacc.open{box-shadow:var(--card-glow)}
+.subarow{display:flex;align-items:center;gap:12px;padding:10px 13px;cursor:pointer;user-select:none;transition:background .15s}
+.subarow:hover{background:var(--panel)}
+.subacc .caret{width:13px;height:13px}
+.subacc.open .caret{transform:rotate(90deg);color:var(--acc)}
+.subname{font-family:var(--disp);font-weight:700;font-size:13.5px;flex:1}
+.subbody{display:none;border-top:1px solid var(--line2);padding:13px;background:var(--panel)}
+.subacc.open .subbody{display:block;animation:f .22s ease both}
+.mcell-sm{padding:9px 10px}
+.mcell-sm .mn{font-size:10px;margin-bottom:5px}
+.suppteam{display:flex;align-items:flex-start;gap:10px;padding:10px 13px;margin:0 0 7px 8px;font-size:12.5px;
+  color:var(--faint);background:repeating-linear-gradient(135deg,var(--panel2),var(--panel2) 8px,var(--panel) 8px,var(--panel) 16px);
+  border:1px dashed var(--line);border-radius:8px}
+.suppteam svg{width:16px;height:16px;flex:0 0 auto;margin-top:1px;color:var(--faint)}
+.suppteam b{color:var(--dim)}
+.suppwhy{margin-top:3px;font-size:11.5px;line-height:1.5;color:var(--faint)}
+
 /* source error panel */
 .srcerr{background:var(--warn-bg);border:1px solid #f0d19c;border-left:4px solid var(--warn);border-radius:10px;
   padding:14px 17px;margin-bottom:20px;box-shadow:var(--card-glow)}
@@ -218,9 +242,10 @@ footer{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-si
 
 <p class="intro">A generic maturity model for measuring AI-native engineering across teams that are starting from
 different places. Five dimensions, each scored 1&ndash;4 (Exploring &rarr; Piloting &rarr; Scaling &rarr; Optimizing),
-tracked at the org and division level &mdash; never per-person. Data below is invented to illustrate the shape of the
-model; see the <b>Definitions</b> tab for how each metric is actually computed and the <b>Blueprint</b> tab for how to
-wire it up to real data.</p>
+drilling down from org &rarr; division &rarr; team &mdash; never per-person, and a team below a configurable size
+floor is suppressed rather than computed. Data below is invented to illustrate the shape of the model; see the
+<b>Definitions</b> tab for how each metric is actually computed and the <b>Blueprint</b> tab for how to wire it up
+to real data.</p>
 </div>
 
 <div class="wrap">
@@ -370,12 +395,13 @@ const DROPPED = [
 
 const PIPELINE = [
   {h:'Source systems', items:['Git / GitHub or GitLab','Jira or equivalent ticketing','CI/CD (build, deploy, gate logs)','AI tool telemetry (Claude Code, Copilot, Cursor usage logs)','Vendor billing / credit-usage exports','Incident management (PagerDuty, Opsgenie)']},
-  {h:'Semantic layer', items:['Warehouse (Snowflake or equivalent)','Entities: person, repo, product/division, PR, deploy, incident','repo → product mapping, resolved and versioned','Per-IC data kept separate from per-product rollups']},
-  {h:'This dashboard', items:['5 dimension scores, org + division','Levels 1–4, trended quarter over quarter','Definitions + caveats travel with the numbers','Refresh cadence: weekly pull, monthly review']},
+  {h:'Semantic layer', items:['Warehouse (Snowflake or equivalent)','Entities: person, repo, product/division, team, PR, deploy, incident','repo → product/team mapping, resolved and versioned','Per-IC data kept separate from per-team and per-product rollups']},
+  {h:'This dashboard', items:['5 dimension scores, org + division + team','Levels 1–4, trended quarter over quarter','Definitions + caveats travel with the numbers','Refresh cadence: weekly pull, monthly review']},
 ];
 
 const PRINCIPLES = [
   {t:'Per-person data is visibility-only', d:'Individual numbers exist for self-coaching and comparison, never for stack-ranking. If a metric can’t be defended as coaching material, don’t compute it per person.'},
+  {t:'Team rollups have a size floor', d:'Team is the finest granularity this model computes — never per-person. But a 2-person "team average" is de facto per-person data, so teams below a configurable minimum (default 3) are shown by name and headcount only, metrics withheld, not silently computed anyway.'},
   {t:'Proxies are proxies', d:'AI-authorship via commit metadata undercounts inline/autocomplete use. Treat every AI-attribution metric as a trend line, not an exact share.'},
   {t:'Pair activity with outcome', d:'Adoption and spend metrics mean nothing on their own — always read them next to Delivery Flow and Quality & Risk. Usage going up while defects go up is not progress.'},
   {t:'A metric with no owner decays', d:'Every dimension needs a named owner who reviews it monthly. An unowned metric is the first one to go stale or get gamed.'},
@@ -389,7 +415,25 @@ const DIVISIONS_SAMPLE = [
      spend:{level:3, trend:1, m:[['Credit utilization','71%','+8pp'],['Spend / active user','$134/mo','+$6']]},
      quality:{level:3, trend:1, m:[['AI-generated test coverage','38%','+12pp'],['Critical/high vulns escaped','1','−2']]},
      health:{level:3, trend:0, m:[['Composite score','67/100','+3']]},
-   }},
+   },
+   teamBreakdown:[
+     {name:'Checkout', engineers:9, suppressed:false, dims:{
+       adoption:{level:4, trend:1, m:[['Weekly active usage','93%','+4pp'],['AI-assisted PR share','70%','+11pp']]},
+       flow:{level:4, trend:0, m:[['Deploys / week (median)','7.2','+0.6'],['Lead time','8.0 hrs','−1.0 hrs']]},
+       spend:{level:3, trend:0, m:[['Credit utilization','74%','+5pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:3, trend:1, m:[['AI-generated test coverage','44%','+9pp'],['Critical/high vulns escaped','0','−1']]},
+       health:{level:3, trend:0, m:[['Composite score','70/100','+2']]},
+     }},
+     {name:'Billing Core', engineers:8, suppressed:false, dims:{
+       adoption:{level:3, trend:1, m:[['Weekly active usage','81%','+3pp'],['AI-assisted PR share','55%','+6pp']]},
+       flow:{level:3, trend:1, m:[['Deploys / week (median)','4.0','+0.2'],['Lead time','16.5 hrs','−2.0 hrs']]},
+       spend:{level:3, trend:1, m:[['Credit utilization','69%','+7pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:3, trend:0, m:[['AI-generated test coverage','35%','+8pp'],['Critical/high vulns escaped','1','0']]},
+       health:{level:3, trend:0, m:[['Composite score','65/100','+1']]},
+     }},
+     {name:'Fraud & Risk', engineers:2, suppressed:true,
+      reason:'2 engineers — below the 3-person minimum for team-level reporting. A team this small would make individual contribution identifiable from the aggregate, which this framework’s governance model rules out.'},
+   ]},
   {name:'Core Platform & Infra', teams:8, engineers:58,
    dims:{
      adoption:{level:3, trend:1, m:[['Weekly active usage','74%','+11pp'],['AI-assisted PR share','48%','+7pp']]},
@@ -397,7 +441,23 @@ const DIVISIONS_SAMPLE = [
      spend:{level:3, trend:1, m:[['Credit utilization','69%','+5pp'],['Spend / active user','$126/mo','+$4']]},
      quality:{level:4, trend:1, m:[['AI-generated test coverage','52%','+14pp'],['Critical/high vulns escaped','0','−1']]},
      health:{level:4, trend:1, m:[['Composite score','74/100','+2']]},
-   }},
+   },
+   teamBreakdown:[
+     {name:'Platform Core', engineers:11, suppressed:false, dims:{
+       adoption:{level:3, trend:1, m:[['Weekly active usage','78%','+9pp'],['AI-assisted PR share','51%','+5pp']]},
+       flow:{level:4, trend:1, m:[['Deploys / week (median)','11.0','+1.4'],['Lead time','3.5 hrs','−1.2 hrs']]},
+       spend:{level:3, trend:0, m:[['Credit utilization','71%','+4pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:4, trend:1, m:[['AI-generated test coverage','56%','+15pp'],['Critical/high vulns escaped','0','0']]},
+       health:{level:4, trend:0, m:[['Composite score','76/100','+1']]},
+     }},
+     {name:'Developer Tooling', engineers:9, suppressed:false, dims:{
+       adoption:{level:4, trend:1, m:[['Weekly active usage','86%','+13pp'],['AI-assisted PR share','61%','+10pp']]},
+       flow:{level:3, trend:1, m:[['Deploys / week (median)','6.8','+0.5'],['Lead time','6.1 hrs','−0.8 hrs']]},
+       spend:{level:4, trend:1, m:[['Credit utilization','80%','+9pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:4, trend:1, m:[['AI-generated test coverage','58%','+11pp'],['Critical/high vulns escaped','0','−1']]},
+       health:{level:4, trend:1, m:[['Composite score','80/100','+3']]},
+     }},
+   ]},
   {name:'Customer Portal', teams:7, engineers:52,
    dims:{
      adoption:{level:3, trend:1, m:[['Weekly active usage','63%','+9pp'],['AI-assisted PR share','34%','+5pp']]},
@@ -405,7 +465,23 @@ const DIVISIONS_SAMPLE = [
      spend:{level:2, trend:0, m:[['Credit utilization','44%','+3pp'],['Spend / active user','$102/mo','+$2']]},
      quality:{level:2, trend:1, m:[['AI-generated test coverage','19%','+6pp'],['Critical/high vulns escaped','4','−1']]},
      health:{level:3, trend:0, m:[['Composite score','58/100','+1']]},
-   }},
+   },
+   teamBreakdown:[
+     {name:'Web App', engineers:13, suppressed:false, dims:{
+       adoption:{level:3, trend:1, m:[['Weekly active usage','68%','+8pp'],['AI-assisted PR share','39%','+6pp']]},
+       flow:{level:2, trend:1, m:[['Deploys / week (median)','3.1','+0.3'],['Lead time','33.0 hrs','−5.0 hrs']]},
+       spend:{level:2, trend:0, m:[['Credit utilization','48%','+2pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:2, trend:1, m:[['AI-generated test coverage','23%','+7pp'],['Critical/high vulns escaped','2','−1']]},
+       health:{level:3, trend:0, m:[['Composite score','61/100','+2']]},
+     }},
+     {name:'Support Tools', engineers:9, suppressed:false, dims:{
+       adoption:{level:2, trend:0, m:[['Weekly active usage','56%','+4pp'],['AI-assisted PR share','27%','+3pp']]},
+       flow:{level:2, trend:0, m:[['Deploys / week (median)','1.6','0'],['Lead time','52.0 hrs','−2.0 hrs']]},
+       spend:{level:2, trend:0, m:[['Credit utilization','38%','+1pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:2, trend:0, m:[['AI-generated test coverage','13%','+3pp'],['Critical/high vulns escaped','2','0']]},
+       health:{level:2, trend:0, m:[['Composite score','53/100','0']]},
+     }},
+   ]},
   {name:'Mobile Experience', teams:5, engineers:33,
    dims:{
      adoption:{level:2, trend:1, m:[['Weekly active usage','41%','+7pp'],['AI-assisted PR share','22%','+4pp']]},
@@ -413,7 +489,25 @@ const DIVISIONS_SAMPLE = [
      spend:{level:2, trend:0, m:[['Credit utilization','37%','+2pp'],['Spend / active user','$96/mo','+$1']]},
      quality:{level:1, trend:-1, m:[['AI-generated test coverage','8%','+3pp'],['Critical/high vulns escaped','6','+1']]},
      health:{level:2, trend:0, m:[['Composite score','49/100','0']]},
-   }},
+   },
+   teamBreakdown:[
+     {name:'iOS', engineers:14, suppressed:false, dims:{
+       adoption:{level:2, trend:1, m:[['Weekly active usage','46%','+9pp'],['AI-assisted PR share','25%','+5pp']]},
+       flow:{level:2, trend:0, m:[['Deploys / week (median)','2.1','+0.1'],['Lead time','45.0 hrs','−3.0 hrs']]},
+       spend:{level:2, trend:0, m:[['Credit utilization','41%','+3pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:1, trend:0, m:[['AI-generated test coverage','10%','+4pp'],['Critical/high vulns escaped','3','0']]},
+       health:{level:2, trend:0, m:[['Composite score','52/100','+1']]},
+     }},
+     {name:'Android', engineers:12, suppressed:false, dims:{
+       adoption:{level:2, trend:1, m:[['Weekly active usage','38%','+6pp'],['AI-assisted PR share','19%','+3pp']]},
+       flow:{level:1, trend:0, m:[['Deploys / week (median)','1.4','0'],['Lead time','58.0 hrs','−1.0 hrs']]},
+       spend:{level:1, trend:0, m:[['Credit utilization','33%','+1pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:1, trend:-1, m:[['AI-generated test coverage','6%','+2pp'],['Critical/high vulns escaped','3','+1']]},
+       health:{level:2, trend:0, m:[['Composite score','47/100','0']]},
+     }},
+     {name:'watchOS Pilot', engineers:2, suppressed:true,
+      reason:'2 engineers — below the 3-person minimum for team-level reporting. A team this small would make individual contribution identifiable from the aggregate, which this framework’s governance model rules out.'},
+   ]},
   {name:'Data & Analytics Platform', teams:6, engineers:41,
    flag:'Notebook- and pipeline-based work doesn’t map cleanly onto PR- and deploy-based metrics. Flow and Adoption are likely undercounted here — flagged for custom instrumentation rather than trusted at face value.',
    dims:{
@@ -422,7 +516,18 @@ const DIVISIONS_SAMPLE = [
      spend:{level:1, trend:-1, m:[['Credit utilization','26%','−2pp'],['Spend / active user','$71/mo','−$3']]},
      quality:{level:1, trend:0, m:[['AI-generated test coverage','6%','+1pp'],['Critical/high vulns escaped','5','+2']]},
      health:{level:2, trend:-1, m:[['Composite score','45/100','−1']]},
-   }},
+   },
+   teamBreakdown:[
+     {name:'Data Pipelines', engineers:16, suppressed:false, dims:{
+       adoption:{level:2, trend:1, m:[['Weekly active usage','35%','+6pp'],['AI-assisted PR share','16%','+3pp']]},
+       flow:{level:1, trend:0, m:[['Deploys / week (median)','0.7','0'],['Lead time','n/a (batch)','—']]},
+       spend:{level:1, trend:-1, m:[['Credit utilization','28%','−1pp'],['Spend / active user','n/a','n/a']]},
+       quality:{level:1, trend:0, m:[['AI-generated test coverage','7%','+2pp'],['Critical/high vulns escaped','4','+1']]},
+       health:{level:2, trend:-1, m:[['Composite score','47/100','−1']]},
+     }},
+     {name:'ML Experiments', engineers:2, suppressed:true,
+      reason:'2 engineers — below the 3-person minimum for team-level reporting. A team this small would make individual contribution identifiable from the aggregate, which this framework’s governance model rules out.'},
+   ]},
 ];
 
 // --- live data wiring -------------------------------------------------
@@ -568,23 +673,67 @@ function compositeLevel(dims){
   return vals.reduce((a,b)=>a+b,0)/vals.length;
 }
 
+// Shared by division rows and team rows — a team is scored exactly the way a division
+// is, just one notch finer, so the cell markup shouldn't drift between the two.
+function dimCells(dimsObj, compact){
+  return DIMENSIONS.map(d=>{
+    const dd = dimsObj[d.id];
+    const L = lvl(dd.level);
+    return `<div class="mcell${compact?' mcell-sm':''}">
+      <div class="mn">${d.name}</div>
+      <div class="lvlname" style="margin-bottom:7px"><span class="lvnum" style="background:var(--${L.key}-bg);color:var(--${L.key})">L${dd.level}</span>${L.name} ${trendHtml(dd.trend)}</div>
+      ${dd.m.map(row=>`<div class="mrow"><span class="k">${row[0]}</span><span class="v">${row[1]} <span style="color:var(--faint)">(${row[2]})</span></span></div>`).join('')}
+    </div>`;
+  }).join('');
+}
+
+function coverageFlag(dimsObj, explicitFlag){
+  const insufficient = DIMENSIONS.filter(d => dimsObj[d.id] && dimsObj[d.id].insufficientData).map(d => d.name);
+  return explicitFlag || (insufficient.length
+    ? `No data yet for: ${insufficient.join(', ')}. Level shown defaults to L1 until a source is connected for ${insufficient.length > 1 ? 'these dimensions' : 'this dimension'}.`
+    : null);
+}
+
+function renderTeams(divIdx, teams){
+  if (!teams || !teams.length) return '';
+  const rows = teams.map((t, ti) => {
+    if (t.suppressed) {
+      return `<div class="suppteam">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7-10-7-10-7z" opacity=".35"/><path d="M4 4l16 16" stroke-linecap="round"/></svg>
+        <div><b>${t.name}</b> &middot; ${t.engineers} engineer${t.engineers===1?'':'s'} &mdash; not reported<div class="suppwhy">${t.reason||''}</div></div>
+      </div>`;
+    }
+    const comp = compositeLevel(t.dims);
+    const compL = lvl(Math.round(comp));
+    const flagText = coverageFlag(t.dims);
+    return `<div class="subacc" id="subacc-${divIdx}-${ti}" style="--seg:var(--${compL.key})">
+      <div class="subarow" onclick="toggleSubAcc(${divIdx},${ti})">
+        <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>
+        <div style="flex:1">
+          <div class="subname">${t.name}</div>
+          <div class="ameta">${t.engineers} engineers</div>
+        </div>
+        <div class="acompbadge" style="background:var(--${compL.key}-bg);color:var(--${compL.key})">avg L${comp.toFixed(1)} &middot; ${compL.name}</div>
+      </div>
+      <div class="subbody">
+        <div class="dimrow">${dimCells(t.dims, true)}</div>
+        ${flagText ? `<div class="flag"><b>Coverage note:</b> ${flagText}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+  const suppressedCount = teams.filter(t=>t.suppressed).length;
+  return `<div class="teamswrap">
+    <div class="teamshead">Teams <span class="c">${teams.length} total${suppressedCount ? `, ${suppressedCount} below reporting size` : ''} &middot; click to expand</span></div>
+    ${rows}
+  </div>`;
+}
+
 function renderDivisions(){
   document.getElementById('divlist').innerHTML = DIVISIONS.map((dv,idx)=>{
     const comp = compositeLevel(dv.dims);
     const compL = lvl(Math.round(comp));
-    const cells = DIMENSIONS.map(d=>{
-      const dd = dv.dims[d.id];
-      const L = lvl(dd.level);
-      return `<div class="mcell">
-        <div class="mn">${d.name}</div>
-        <div class="lvlname" style="margin-bottom:7px"><span class="lvnum" style="background:var(--${L.key}-bg);color:var(--${L.key})">L${dd.level}</span>${L.name} ${trendHtml(dd.trend)}</div>
-        ${dd.m.map(row=>`<div class="mrow"><span class="k">${row[0]}</span><span class="v">${row[1]} <span style="color:var(--faint)">(${row[2]})</span></span></div>`).join('')}
-      </div>`;
-    }).join('');
-    const insufficient = DIMENSIONS.filter(d => dv.dims[d.id] && dv.dims[d.id].insufficientData).map(d => d.name);
-    const flagText = dv.flag || (insufficient.length
-      ? `No data yet for: ${insufficient.join(', ')}. Level shown defaults to L1 until a source is connected for ${insufficient.length > 1 ? 'these dimensions' : 'this dimension'}.`
-      : null);
+    const cells = dimCells(dv.dims);
+    const flagText = coverageFlag(dv.dims, dv.flag);
     return `<div class="acc" id="acc-${idx}" style="--seg:var(--${compL.key})">
       <div class="arow" onclick="toggleAcc(${idx})">
         <svg class="caret" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 6l6 6-6 6"/></svg>
@@ -597,11 +746,13 @@ function renderDivisions(){
       <div class="abody">
         <div class="dimrow">${cells}</div>
         ${flagText ? `<div class="flag"><b>Coverage note:</b> ${flagText}</div>` : ''}
+        ${renderTeams(idx, dv.teamBreakdown)}
       </div>
     </div>`;
   }).join('');
 }
 function toggleAcc(i){ document.getElementById('acc-'+i).classList.toggle('open'); }
+function toggleSubAcc(divIdx, teamIdx){ document.getElementById(`subacc-${divIdx}-${teamIdx}`).classList.toggle('open'); }
 
 function renderDefs(){
   // Always the static methodology text, regardless of whether live data is loaded —

@@ -3,12 +3,21 @@ Metric formulas for the five maturity dimensions.
 
 Every function has the same signature:
 
-    fn(store: Store, division_id: Optional[str], start: datetime, end: datetime) -> Optional[float]
+    fn(store: Store, division_id: Optional[str], start: datetime, end: datetime,
+       team: Optional[str] = None) -> Optional[float]
 
-`division_id=None` means "org-wide." Returning None means "insufficient
-data" — the engine excludes that metric from level aggregation rather than
-silently treating missing data as zero. This mirrors the dashboard's own
-"coverage note" convention: a gap in the data is surfaced, not hidden.
+`division_id=None` means "org-wide." `team=None` means "whole division" (or
+whole org, if division_id is also None) — pass both to scope down to a
+single team within a division. Returning None means "insufficient data" —
+the engine excludes that metric from level aggregation rather than silently
+treating missing data as zero. This mirrors the dashboard's own "coverage
+note" convention: a gap in the data is surfaced, not hidden.
+
+Team resolution piggybacks on the same repo/person joins used for division:
+PR- and repo-keyed metrics resolve team via the repo's `team` field, person-
+keyed metrics via the person's `team` field. One metric — spend, because
+billing is naturally reported per division, not per team — is honest about
+not supporting team scope at all rather than fabricating a split.
 
 These formulas encode real (documented) simplifications, e.g. lead time is
 approximated as PR-merge-to-next-repo-deploy, not a full commit-level trace.
@@ -26,8 +35,19 @@ def _in_period(dt, start, end) -> bool:
     return dt is not None and start <= dt <= end
 
 
-def _division_matches(rec_division_id, division_id) -> bool:
-    return division_id is None or rec_division_id == division_id
+def _scope_matches(rec_division_id, rec_team, division_id, team) -> bool:
+    """True if a record belongs to the scope being queried.
+
+    division_id=None/team=None act as wildcards at their level — e.g.
+    division_id="payments", team=None matches every team in Payments.
+    team is only ever meaningful alongside a division_id; a team name isn't
+    assumed unique across the whole org.
+    """
+    if division_id is not None and rec_division_id != division_id:
+        return False
+    if team is not None and rec_team != team:
+        return False
+    return True
 
 
 def _pct(numerator: int, denominator: int) -> Optional[float]:
@@ -38,48 +58,48 @@ def _pct(numerator: int, denominator: int) -> Optional[float]:
 
 # ---------------------------------------------------------------- adoption
 
-def weekly_active_usage(store: Store, division_id, start, end) -> Optional[float]:
-    people = store.people(division_id)
+def weekly_active_usage(store: Store, division_id, start, end, team=None) -> Optional[float]:
+    people = store.people(division_id, team)
     if not people:
         return None
     active_ids = {
         e.person_id for e in store.get("ai_usage_event")
         if _in_period(e.occurred_at, start, end)
-        and _division_matches(store.division_of_person(e.person_id), division_id)
+        and _scope_matches(store.division_of_person(e.person_id), store.team_of_person(e.person_id), division_id, team)
     }
     return _pct(len(active_ids), len(people))
 
 
-def ai_pr_share(store: Store, division_id, start, end) -> Optional[float]:
+def ai_pr_share(store: Store, division_id, start, end, team=None) -> Optional[float]:
     prs = [
         pr for pr in store.get("pull_request")
         if _in_period(pr.merged_at, start, end)
-        and _division_matches(store.division_of_repo(pr.repo_id), division_id)
+        and _scope_matches(store.division_of_repo(pr.repo_id), store.team_of_repo(pr.repo_id), division_id, team)
     ]
     if not prs:
         return None
     return _pct(sum(1 for pr in prs if pr.ai_assisted), len(prs))
 
 
-def training_pct(store: Store, division_id, start, end) -> Optional[float]:
-    people = store.people(division_id)
+def training_pct(store: Store, division_id, start, end, team=None) -> Optional[float]:
+    people = store.people(division_id, team)
     if not people:
         return None
     trained_ids = {
         t.person_id for t in store.get("training_record")
         if t.completed_at is not None and t.completed_at <= end
-        and _division_matches(store.division_of_person(t.person_id), division_id)
+        and _scope_matches(store.division_of_person(t.person_id), store.team_of_person(t.person_id), division_id, team)
     }
     return _pct(len(trained_ids), len(people))
 
 
 # -------------------------------------------------------------------- flow
 
-def deploy_frequency_per_week(store: Store, division_id, start, end) -> Optional[float]:
+def deploy_frequency_per_week(store: Store, division_id, start, end, team=None) -> Optional[float]:
     deploys = [
         d for d in store.get("deploy")
         if d.is_prod and _in_period(d.deployed_at, start, end)
-        and _division_matches(store.division_of_repo(d.repo_id), division_id)
+        and _scope_matches(store.division_of_repo(d.repo_id), store.team_of_repo(d.repo_id), division_id, team)
     ]
     weeks = max((end - start).days / 7.0, 1e-6)
     if not deploys:
@@ -87,7 +107,7 @@ def deploy_frequency_per_week(store: Store, division_id, start, end) -> Optional
     return round(len(deploys) / weeks, 2)
 
 
-def lead_time_hours(store: Store, division_id, start, end) -> Optional[float]:
+def lead_time_hours(store: Store, division_id, start, end, team=None) -> Optional[float]:
     deploys_by_repo: dict[str, list] = {}
     for d in store.get("deploy"):
         if d.is_prod:
@@ -99,7 +119,7 @@ def lead_time_hours(store: Store, division_id, start, end) -> Optional[float]:
     for pr in store.get("pull_request"):
         if not _in_period(pr.merged_at, start, end):
             continue
-        if not _division_matches(store.division_of_repo(pr.repo_id), division_id):
+        if not _scope_matches(store.division_of_repo(pr.repo_id), store.team_of_repo(pr.repo_id), division_id, team):
             continue
         for d in deploys_by_repo.get(pr.repo_id, []):
             if d.deployed_at >= pr.merged_at:
@@ -110,11 +130,11 @@ def lead_time_hours(store: Store, division_id, start, end) -> Optional[float]:
     return round(median(deltas), 1)
 
 
-def change_failure_rate_pct(store: Store, division_id, start, end) -> Optional[float]:
+def change_failure_rate_pct(store: Store, division_id, start, end, team=None) -> Optional[float]:
     deploys = [
         d for d in store.get("deploy")
         if d.is_prod and _in_period(d.deployed_at, start, end)
-        and _division_matches(store.division_of_repo(d.repo_id), division_id)
+        and _scope_matches(store.division_of_repo(d.repo_id), store.team_of_repo(d.repo_id), division_id, team)
     ]
     if not deploys:
         return None
@@ -122,12 +142,12 @@ def change_failure_rate_pct(store: Store, division_id, start, end) -> Optional[f
     return _pct(failed, len(deploys))
 
 
-def mttr_hours(store: Store, division_id, start, end) -> Optional[float]:
+def mttr_hours(store: Store, division_id, start, end, team=None) -> Optional[float]:
     incidents = [
         i for i in store.get("incident")
         if i.severity in ("P1", "P2") and i.resolved_at is not None
         and _in_period(i.opened_at, start, end)
-        and _division_matches(i.division_id or store.division_of_repo(i.repo_id), division_id)
+        and _scope_matches(i.division_id or store.division_of_repo(i.repo_id), store.team_of_repo(i.repo_id), division_id, team)
     ]
     if not incidents:
         return None
@@ -137,24 +157,32 @@ def mttr_hours(store: Store, division_id, start, end) -> Optional[float]:
 
 # ------------------------------------------------------------------ spend
 
-def credit_utilization_pct(store: Store, division_id, start, end) -> Optional[float]:
+def credit_utilization_pct(store: Store, division_id, start, end, team=None) -> Optional[float]:
     seats = [
         s for s in store.get("ai_seat")
-        if s.provisioned and _division_matches(store.division_of_person(s.person_id), division_id)
+        if s.provisioned and _scope_matches(store.division_of_person(s.person_id), store.team_of_person(s.person_id), division_id, team)
     ]
     if not seats:
         return None
     return _pct(sum(1 for s in seats if s.active_last_30d), len(seats))
 
 
-def spend_per_active_user_usd(store: Store, division_id, start, end, period_label: Optional[str] = None) -> Optional[float]:
+def spend_per_active_user_usd(store: Store, division_id, start, end, period_label: Optional[str] = None, team=None) -> Optional[float]:
     """Billing records carry their own `period` label (e.g. "2026-Q2") rather than a
     timestamp, since spend is naturally reported per billing cycle. `period_label` is
     passed in by the engine so this stays consistent with whichever period the caller
-    is computing (current vs. prior)."""
+    is computing (current vs. prior).
+
+    Deliberately does NOT support team scope: vendor billing exports we've seen report
+    spend per division (or org-wide), never per team. Splitting it further would mean
+    inventing a number, not reading one — so a team-scoped call always returns None
+    (insufficient data) rather than a division's total attributed to one team.
+    """
+    if team is not None:
+        return None
     records = [
         b for b in store.get("billing_record")
-        if _division_matches(b.division_id, division_id)
+        if _scope_matches(b.division_id, None, division_id, None)
         and (period_label is None or b.period == period_label)
     ]
     if not records:
@@ -168,42 +196,42 @@ def spend_per_active_user_usd(store: Store, division_id, start, end, period_labe
 
 # ---------------------------------------------------------------- quality
 
-def ai_test_pr_pct(store: Store, division_id, start, end) -> Optional[float]:
+def ai_test_pr_pct(store: Store, division_id, start, end, team=None) -> Optional[float]:
     prs = [
         pr for pr in store.get("pull_request")
         if _in_period(pr.merged_at, start, end)
-        and _division_matches(store.division_of_repo(pr.repo_id), division_id)
+        and _scope_matches(store.division_of_repo(pr.repo_id), store.team_of_repo(pr.repo_id), division_id, team)
     ]
     if not prs:
         return None
     return _pct(sum(1 for pr in prs if pr.ai_test_generated), len(prs))
 
 
-def ai_review_gate_pct(store: Store, division_id, start, end) -> Optional[float]:
+def ai_review_gate_pct(store: Store, division_id, start, end, team=None) -> Optional[float]:
     prs = [
         pr for pr in store.get("pull_request")
         if _in_period(pr.merged_at, start, end)
         and pr.ai_review_passed is not None
-        and _division_matches(store.division_of_repo(pr.repo_id), division_id)
+        and _scope_matches(store.division_of_repo(pr.repo_id), store.team_of_repo(pr.repo_id), division_id, team)
     ]
     if not prs:
         return None
     return _pct(sum(1 for pr in prs if pr.ai_review_passed), len(prs))
 
 
-def vulns_escaped_per_quarter(store: Store, division_id, start, end) -> Optional[float]:
+def vulns_escaped_per_quarter(store: Store, division_id, start, end, team=None) -> Optional[float]:
     vulns = [
         v for v in store.get("vulnerability")
         if v.severity in ("critical", "high") and v.ai_generated_code and v.reached_prod
         and _in_period(v.detected_at, start, end)
-        and _division_matches(store.division_of_repo(v.repo_id), division_id)
+        and _scope_matches(store.division_of_repo(v.repo_id), store.team_of_repo(v.repo_id), division_id, team)
     ]
     return float(len(vulns))
 
 
 # ----------------------------------------------------------------- health
 
-def composite_score(store: Store, division_id, start, end, weights: Optional[dict] = None) -> Optional[float]:
+def composite_score(store: Store, division_id, start, end, weights: Optional[dict] = None, team=None) -> Optional[float]:
     weights = weights or {
         "test_coverage": 0.30, "complexity_coupling": 0.25, "dead_code": 0.15,
         "dependency_freshness": 0.15, "doc_coverage": 0.15,
@@ -212,7 +240,7 @@ def composite_score(store: Store, division_id, start, end, weights: Optional[dic
     for snap in store.get("code_health_snapshot"):
         if not _in_period_date(snap.snapshot_at, start, end):
             continue
-        if not _division_matches(store.division_of_repo(snap.repo_id), division_id):
+        if not _scope_matches(store.division_of_repo(snap.repo_id), store.team_of_repo(snap.repo_id), division_id, team):
             continue
         prev = latest_by_repo.get(snap.repo_id)
         if prev is None or snap.snapshot_at > prev.snapshot_at:

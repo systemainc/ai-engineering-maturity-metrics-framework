@@ -1,4 +1,4 @@
-repo_id,name,division
-r1,payments-api,payments
-r2,payments-web,payments
-r3,platform-core,platform
+repo_id,name,division,team
+r1,payments-api,payments,teamA
+r2,payments-web,payments,teamA
+r3,platform-core,platform,teamC

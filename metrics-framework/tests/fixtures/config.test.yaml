@@ -20,7 +20,7 @@ sources:
     type: csv
     entity: repo
     path: repos.csv
-    field_map: {id: repo_id, name: name, division_id: division}
+    field_map: {id: repo_id, name: name, division_id: division, team: team}
 
   - name: pull_requests
     type: csv
@@ -77,6 +77,10 @@ sources:
     field_map: {repo_id: repo_id, snapshot_at: snapshot_at, test_coverage_pct: test_coverage_pct, complexity_score: complexity_score, dead_code_pct: dead_code_pct, dependency_freshness_pct: dependency_freshness_pct, doc_coverage_pct: doc_coverage_pct}
 
 metrics:
+  # Lowered from the framework default (3) so this small fixture (2-3 people per team)
+  # can exercise both paths: teamA/teamC compute full team-level metrics, teamB (1
+  # person) is still small enough to hit the suppression path.
+  min_team_size: 2
   levels:
     - {n: 1, name: Exploring}
     - {n: 2, name: Piloting}

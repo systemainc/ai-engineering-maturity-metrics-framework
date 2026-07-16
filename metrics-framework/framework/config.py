@@ -48,6 +48,9 @@ class Config:
     dimensions: list               # list[DimensionConfig]
     levels: list                   # [{n, name}, ...]
     output: dict
+    min_team_size: int = 3         # teams smaller than this are suppressed in team-level output,
+                                    # not computed — a 1-2 person "team average" is de facto per-person
+                                    # data, which this framework's governance stance rules out.
     raw: dict = field(default_factory=dict)
 
     def division_ids(self):
@@ -111,5 +114,6 @@ def load_config(path: str) -> Config:
         dimensions=dimensions,
         levels=metrics_raw.get("levels", []),
         output=output,
+        min_team_size=metrics_raw.get("min_team_size", 3),
         raw=raw,
     )

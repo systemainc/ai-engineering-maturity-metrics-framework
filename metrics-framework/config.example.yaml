@@ -36,7 +36,10 @@ sources:
     type: csv
     entity: repo
     path: data/repos.csv
-    field_map: {id: repo_id, name: name, division_id: division}
+    # `team` is optional but drives the dashboard's team-level drilldown for every
+    # repo-keyed metric (Flow, Quality, Codebase Health). If a repo has no team, its
+    # PRs/deploys/vulns still count at the division level, just not at any team's.
+    field_map: {id: repo_id, name: name, division_id: division, team: team}
 
   - name: github_pull_requests
     type: github
@@ -106,6 +109,13 @@ sources:
     params: {since: "2026-04-01"}
 
 metrics:
+  # Teams smaller than this are suppressed in the team-level drilldown — name and
+  # headcount only, no computed metrics — because a team's "average" stops being a
+  # team average and starts being de facto per-person data once the team is this
+  # small. 3 is a reasonable floor for most orgs; raise it if your teams run larger
+  # and you want more headroom, but don't lower it to see more teams "light up."
+  min_team_size: 3
+
   levels:
     - {n: 1, name: Exploring}
     - {n: 2, name: Piloting}
