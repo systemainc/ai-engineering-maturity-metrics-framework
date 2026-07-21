@@ -173,6 +173,22 @@ header{display:flex;justify-content:space-between;align-items:flex-start;gap:20p
 .srcerr li::before{content:"\2013";position:absolute;left:0;color:#b45309}
 .srcerr code{font-family:var(--mono);font-size:11.5px;background:#fdf1de;border:1px solid #f0d19c;border-radius:4px;padding:0 4px}
 
+/* AI-generated insight callout — org/division/team, deliberately distinct from the
+   amber data-quality warnings (.flag / .srcerr): purple, and always shows the
+   underlying computed facts so the prose can be checked against real numbers. */
+.insight{background:var(--purp-bg);border:1px solid #d9c8fb;border-left:4px solid var(--purp);border-radius:10px;
+  padding:14px 17px;margin-bottom:22px;box-shadow:var(--card-glow)}
+.insight.insight-sm{padding:11px 14px;margin-bottom:0;margin-top:12px;border-radius:8px}
+.insight .ih{display:flex;align-items:center;gap:7px;font-family:var(--disp);font-weight:700;font-size:12.5px;
+  color:#5b21b6;margin-bottom:7px;letter-spacing:.01em}
+.insight .ih svg{width:14px;height:14px;flex:0 0 auto}
+.insight .ibadge{font-family:var(--body);font-weight:700;font-size:9.5px;letter-spacing:.05em;text-transform:uppercase;
+  color:#fff;background:var(--purp);padding:2px 7px;border-radius:20px;margin-left:2px}
+.insight p{font-size:13px;color:#4c1d95;line-height:1.55;margin-bottom:8px}
+.insight .ifacts{font-size:11.5px;font-family:var(--mono);color:#7c5fc4;background:#ffffff80;border-radius:6px;
+  padding:7px 10px;line-height:1.6}
+.insight .ifacts b{color:#5b21b6;font-weight:700}
+
 /* definitions tab */
 .defcard{background:var(--panel);border:1px solid var(--line);border-radius:12px;margin-bottom:14px;overflow:hidden;
   box-shadow:var(--card-glow);transition:box-shadow .18s}
@@ -260,6 +276,7 @@ to real data.</p>
   <div id="sourceErrPanel"></div>
   <div class="legend" id="legend"></div>
   <div class="dimgrid" id="dimgrid"></div>
+  <div id="orgInsight"></div>
 
   <div class="radarwrap">
     <svg id="radar" viewBox="0 0 380 310" width="380" height="310" style="overflow:visible"></svg>
@@ -317,6 +334,14 @@ const LEVELS_SAMPLE = [
   {n:3, key:'l3', name:'Scaling',     desc:'Org-wide adoption. Metrics tracked routinely.'},
   {n:4, key:'l4', name:'Optimizing',  desc:'Metrics drive decisions. Continuous tuning.'},
 ];
+
+const ORG_INSIGHT_SAMPLE = {
+  text: "Quality & Risk Automation is the one dimension still stuck at L2 while every other dimension has reached L3 or L4 — closing that gap does more for the org's overall floor than pushing an already-strong dimension further. Start with AI-generated test coverage, currently 29% against the 45% needed for L3.",
+  gap: {
+    dimension_id:'quality', dimension_name:'Quality & Risk Automation', current_level:2,
+    metric:'ai_test_pr_pct', value:29, target:45, distance:16, direction:'higher', metric_level:2, metric_next_level:3,
+  },
+};
 
 const DIMENSIONS_SAMPLE = [
   {
@@ -416,6 +441,10 @@ const DIVISIONS_SAMPLE = [
      quality:{level:3, trend:1, m:[['AI-generated test coverage','38%','+12pp'],['Critical/high vulns escaped','1','−2']]},
      health:{level:3, trend:0, m:[['Composite score','67/100','+3']]},
    },
+   insight:{
+     text:"Quality is this division's lagging dimension at L3 while Adoption has already reached L4 — push AI-generated test coverage from 38% toward the 45% needed for L4 before investing further in adoption, which is already ahead of the rest of the org.",
+     gap:{dimension_id:'quality', dimension_name:'Quality & Risk Automation', current_level:3, metric:'ai_test_pr_pct', value:38, target:45, distance:7, direction:'higher', metric_level:3, metric_next_level:4},
+   },
    teamBreakdown:[
      {name:'Checkout', engineers:9, suppressed:false, dims:{
        adoption:{level:4, trend:1, m:[['Weekly active usage','93%','+4pp'],['AI-assisted PR share','70%','+11pp']]},
@@ -430,6 +459,10 @@ const DIVISIONS_SAMPLE = [
        spend:{level:3, trend:1, m:[['Credit utilization','69%','+7pp'],['Spend / active user','n/a','n/a']]},
        quality:{level:3, trend:0, m:[['AI-generated test coverage','35%','+8pp'],['Critical/high vulns escaped','1','0']]},
        health:{level:3, trend:0, m:[['Composite score','65/100','+1']]},
+     },
+     insight:{
+       text:"Credit utilization is Billing Core's closest lever to its next level — it's already at 69% against a 75% bound, well ahead of where its AI-assisted PR share or test coverage sit relative to their own next thresholds.",
+       gap:{dimension_id:'spend', dimension_name:'AI Spend Efficiency', current_level:3, metric:'credit_utilization_pct', value:69, target:75, distance:6, direction:'higher', metric_level:3, metric_next_level:4},
      }},
      {name:'Fraud & Risk', engineers:2, suppressed:true,
       reason:'2 engineers — below the 3-person minimum for team-level reporting. A team this small would make individual contribution identifiable from the aggregate, which this framework’s governance model rules out.'},
@@ -539,6 +572,10 @@ const LIVE = window.DASHBOARD_DATA || null;
 const LEVELS = (LIVE && LIVE.LEVELS) || LEVELS_SAMPLE;
 const DIMENSIONS = (LIVE && LIVE.DIMENSIONS) || DIMENSIONS_SAMPLE;
 const DIVISIONS = (LIVE && LIVE.DIVISIONS) || DIVISIONS_SAMPLE;
+// Insights are opt-in (metrics-framework's `insights.enabled` config flag) — unlike the
+// three above, an absent orgInsight on real LIVE data means "feature is off," not "use
+// the sample." Only fall back to the illustrative sample when there's no live data at all.
+const ORG_INSIGHT = LIVE ? (LIVE.orgInsight || null) : ORG_INSIGHT_SAMPLE;
 
 if (LIVE && LIVE.meta) {
   document.getElementById('hOrg').textContent = LIVE.meta.org;
@@ -687,6 +724,36 @@ function dimCells(dimsObj, compact){
   }).join('');
 }
 
+const METRIC_LABEL = {
+  weekly_active_usage:'Weekly active usage', ai_pr_share:'AI-assisted PR share', training_pct:'Agentic workflow training',
+  deploy_frequency_per_week:'Deploys / week', lead_time_hours:'Lead time', change_failure_rate_pct:'Change failure rate', mttr_hours:'MTTR',
+  credit_utilization_pct:'Credit utilization', spend_per_active_user_usd:'Spend / active user',
+  ai_test_pr_pct:'AI-generated test coverage', ai_review_gate_pct:'AI review gate coverage', vulns_escaped_per_quarter:'Critical/high vulns escaped',
+  composite_score:'Composite score',
+};
+const DIRECTION_VERB = {higher:'increase', lower:'reduce'};
+
+// Renders an AI-generated "suggested focus" callout. `insight` is {text, gap} straight
+// off the pipeline output (see metrics-framework/framework/insights/) — gap is the
+// deterministic fact set (dimension, metric, current value, target) the model was given;
+// showing it alongside the prose is what makes the prose checkable rather than a black
+// box. Returns '' (renders nothing) if there's no insight for this scope — this is an
+// opt-in feature, absence is the normal/default case, not an error.
+function insightHtml(insight, small){
+  if (!insight || !insight.text) return '';
+  const g = insight.gap || {};
+  const label = METRIC_LABEL[g.metric] || g.metric;
+  const verb = DIRECTION_VERB[g.direction] || 'change';
+  return `<div class="insight${small?' insight-sm':''}">
+    <div class="ih">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-4 12.7V17a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2v-2.3A7 7 0 0 0 12 2z"/><path d="M9 21h6" stroke-linecap="round"/></svg>
+      Suggested focus <span class="ibadge">AI-generated</span>
+    </div>
+    <p>${insight.text}</p>
+    ${g.dimension_name ? `<div class="ifacts">Based on: <b>${g.dimension_name}</b> is L${g.current_level} overall &middot; <b>${label}</b> is ${g.value} (L${g.metric_level} on its own scale) &middot; needs to ${verb} to <b>${g.target}</b> to reach L${g.metric_next_level} on that metric</div>` : ''}
+  </div>`;
+}
+
 function coverageFlag(dimsObj, explicitFlag){
   const insufficient = DIMENSIONS.filter(d => dimsObj[d.id] && dimsObj[d.id].insufficientData).map(d => d.name);
   return explicitFlag || (insufficient.length
@@ -718,6 +785,7 @@ function renderTeams(divIdx, teams){
       <div class="subbody">
         <div class="dimrow">${dimCells(t.dims, true)}</div>
         ${flagText ? `<div class="flag"><b>Coverage note:</b> ${flagText}</div>` : ''}
+        ${insightHtml(t.insight, true)}
       </div>
     </div>`;
   }).join('');
@@ -746,10 +814,15 @@ function renderDivisions(){
       <div class="abody">
         <div class="dimrow">${cells}</div>
         ${flagText ? `<div class="flag"><b>Coverage note:</b> ${flagText}</div>` : ''}
+        ${insightHtml(dv.insight, true)}
         ${renderTeams(idx, dv.teamBreakdown)}
       </div>
     </div>`;
   }).join('');
+}
+
+function renderOrgInsight(){
+  document.getElementById('orgInsight').innerHTML = insightHtml(ORG_INSIGHT, false);
 }
 function toggleAcc(i){ document.getElementById('acc-'+i).classList.toggle('open'); }
 function toggleSubAcc(divIdx, teamIdx){ document.getElementById(`subacc-${divIdx}-${teamIdx}`).classList.toggle('open'); }
@@ -806,6 +879,7 @@ document.querySelectorAll('.tab').forEach(t=>{
 renderSourceErrors();
 renderLegend();
 renderDimGrid();
+renderOrgInsight();
 renderRadar();
 renderDivisions();
 renderDefs();

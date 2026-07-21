@@ -37,6 +37,14 @@ team below a configurable size (default 3) is shown by name and headcount
 only — metrics withheld, not computed anyway — because a 2-person "team
 average" is de facto per-person data.
 
+Optionally, each scorecard can carry a "Suggested focus" callout — two
+sentences on the single highest-leverage next move for that scope. It's
+built as two deliberately separate layers: a plain, deterministic, fully
+tested Python step decides *what's true* (which metric is the lever, and
+by how much), and only then, optionally, an LLM is asked to phrase that
+already-computed fact into prose — never to decide it. Off by default; see
+[`metrics-framework/README.md`](./metrics-framework/README.md#optional-llm-generated-insights).
+
 ## Quick start
 
 Just want to see it? Open `ai-engineering-maturity-dashboard.html` in a

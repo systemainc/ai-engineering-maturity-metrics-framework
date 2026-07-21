@@ -15,7 +15,10 @@ config.yaml ─▶ adapters (fetch + normalize) ─▶ Store (semantic entities)
                                           metrics engine (formulas + levels)
                                                       │
                                                       ▼
-                                     out/metrics.json + out/dashboard_data.js
+                                    gap analysis (deterministic, no LLM) ─▶ optional:
+                                                      │                    insight provider
+                                                      ▼                    (2 sentences of
+                                     out/metrics.json + out/dashboard_data.js  prose per scope)
                                                       │
                                                       ▼
                               ai-engineering-maturity-dashboard.html (drop the
@@ -128,6 +131,49 @@ framework's per-person exclusion is meant to rule out. Raise
 `min_team_size` for orgs with larger teams; don't lower it just to make more
 teams "light up" in the dashboard.
 
+## Optional: LLM-generated insights
+
+Off by default. Set `insights.enabled: true` in the config and every scope's
+scorecard (org, each division, each non-suppressed team) gets a "Suggested
+focus" callout on the dashboard: two sentences of prose plus the exact facts
+they're based on.
+
+This is deliberately two separate layers, not one LLM call from raw scores
+to a recommendation:
+
+1. **`framework/metrics/gap_analysis.py`** — pure Python, no LLM, no
+   network. Given a scope's already-computed dimension levels and raw
+   metric values, `top_gap()` picks the single highest-leverage next move:
+   the lowest-level dimension (that's what's holding the scope's overall
+   picture down), and within it, the one metric worth focusing on (for
+   `minimum`-strategy dimensions, whichever metric is *at* the dimension's
+   level — it's definitionally the gating one; for `average`-strategy
+   dimensions, the lowest-level metric, tie-broken by closeness to its own
+   next threshold). Fully deterministic, fully unit-tested
+   (`tests/test_gap_analysis.py`), and useful on its own even with insights
+   disabled — it's the same fact set the dashboard shows in the callout's
+   fact strip.
+2. **`framework/insights/`** — takes ONE of those fact sets and asks a
+   model to phrase it into two sentences. The model never sees raw Store
+   data, never sees other metrics or other scopes, and is explicitly told
+   not to invent numbers or causes. Its only job is wording, not deciding
+   what's true. Providers are pluggable (`anthropic` | `openai` today,
+   `framework/insights/PROVIDER_REGISTRY`) via direct HTTPS calls — no
+   extra SDK dependency, same convention as `github_adapter.py`.
+
+Generation happens once, in the pipeline (`pipeline.py`'s `_apply_insights`),
+and gets baked into `dashboard_data.js` alongside the numbers — the
+dashboard is a static file, it never calls an LLM API itself, has no API
+key, and costs nothing per pageview. One failed call (bad auth, timeout)
+skips that scope's insight and is recorded in `meta.insightErrors`; it
+never aborts the run or blanks out the real, already-correct metrics —
+same posture as a broken data source.
+
+Every insight the dashboard shows displays its underlying gap facts right
+next to the prose (dimension, metric, current value, target) — see the
+`.insight` callout's fact strip — specifically so the AI-generated text is
+checkable against real numbers, not a black box.
+
 ## Governance principles this framework enforces in code, not just docs
 
 - **Per-person data never appears in the output.** The engine only computes
@@ -140,6 +186,9 @@ teams "light up" in the dashboard.
   above.
 - **One broken source doesn't take down the dashboard.** See `sourceErrors`
   above.
+- **An LLM only ever phrases facts it's handed, never computes or invents
+  them.** See "Optional: LLM-generated insights" above — the gap analysis
+  that produces those facts is plain, tested, deterministic Python.
 
 ## Layout
 
@@ -158,12 +207,21 @@ framework/
   metrics/
     definitions.py       metric formulas (one function per metric, org/division/team scope)
     engine.py             level assignment, aggregation, trend, team-size suppression, dashboard-shaped output
-  pipeline.py           config -> adapters -> store -> engine -> output
+    gap_analysis.py        deterministic "highest-leverage next move" — no LLM, feeds insights/
+  insights/
+    base.py               InsightProvider interface (mirrors adapters/base.py)
+    prompt.py              turns one gap_analysis fact set into the LLM prompt, nothing else
+    anthropic_provider.py  live: Messages API over plain requests, no SDK dependency
+    openai_provider.py     live: Chat Completions API over plain requests
+  pipeline.py           config -> adapters -> store -> engine -> gap analysis -> (optional) insights -> output
   cli.py                `run` / `validate` commands
 tests/
   fixtures/             small CSV dataset + config.test.yaml (2 divisions, 3 teams, 5 people) —
-                          the whole suite runs offline against this, no credentials
-  test_*.py             includes test_team_scope.py (full-metrics vs. suppressed team paths)
+                          the whole suite runs offline against this, no credentials.
+                          config.test_insights.yaml adds an `insights:` block for the
+                          insights-pipeline tests (provider calls mocked, never real network)
+  test_*.py             includes test_team_scope.py, test_gap_analysis.py,
+                          test_insights_providers.py, test_insights_pipeline.py
 config.example.yaml    a fully worked example config for a 5-division org
 requirements.txt
 ```

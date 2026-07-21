@@ -1,12 +1,5 @@
-# AI Engineering Maturity Framework — example configuration
-#
-# This is the ONE file you edit to point the framework at a different org.
-# Nothing in framework/ should need to change. Secrets are referenced as
-# ${ENV_VAR} and resolved from the environment at load time — never put a
-# token or password directly in this file.
-
 organization:
-  name: "Beacon Digital"
+  name: "Test Org"
   period_current: "2026-Q2"
   period_prior: "2026-Q1"
 
@@ -15,107 +8,76 @@ divisions:
     name: "Payments & Billing"
   - id: platform
     name: "Core Platform & Infra"
-  - id: portal
-    name: "Customer Portal"
-  - id: mobile
-    name: "Mobile Experience"
-  - id: data
-    name: "Data & Analytics Platform"
 
-# Each source declares: a name, a type (which adapter handles it), the
-# semantic entity it produces, and adapter-specific options. Multiple
-# sources can feed the same entity (e.g. GitHub PRs + a CSV backfill).
 sources:
   - name: roster
     type: csv
     entity: person
-    path: data/people.csv
+    path: people.csv
     field_map: {id: person_id, email: email, division_id: division, team: team, role: role, name: name}
 
   - name: repo_catalog
     type: csv
     entity: repo
-    path: data/repos.csv
-    # `team` is optional but drives the dashboard's team-level drilldown for every
-    # repo-keyed metric (Flow, Quality, Codebase Health). If a repo has no team, its
-    # PRs/deploys/vulns still count at the division level, just not at any team's.
+    path: repos.csv
     field_map: {id: repo_id, name: name, division_id: division, team: team}
 
-  - name: github_pull_requests
-    type: github
+  - name: pull_requests
+    type: csv
     entity: pull_request
-    org: my-github-org
-    token_env: GITHUB_TOKEN
-    since: "2026-01-01"
-    repo_division_map_path: data/repo_division_map.csv
-    ai_signal:
-      co_authored_trailers: ["Co-Authored-By: Claude", "Co-Authored-By: Copilot"]
-      bot_authors: ["claude[bot]", "copilot[bot]", "cursor[bot]"]
+    path: pull_requests.csv
+    field_map: {id: pr_id, repo_id: repo_id, author_id: author_id, opened_at: opened_at, merged_at: merged_at, ai_assisted: ai_assisted, ai_test_generated: ai_test_generated, ai_review_passed: ai_review_passed, lines_changed: lines_changed}
 
   - name: deploys
     type: csv
     entity: deploy
-    path: data/deploys.csv
+    path: deploys.csv
     field_map: {id: deploy_id, repo_id: repo_id, deployed_at: deployed_at, environment: environment, is_prod: is_prod, status: status}
 
   - name: incidents
     type: csv
     entity: incident
-    path: data/incidents.csv
+    path: incidents.csv
     field_map: {id: incident_id, opened_at: opened_at, resolved_at: resolved_at, severity: severity, repo_id: repo_id, division_id: division_id}
 
   - name: vulnerabilities
     type: csv
     entity: vulnerability
-    path: data/vulnerabilities.csv
+    path: vulnerabilities.csv
     field_map: {id: vuln_id, detected_at: detected_at, severity: severity, repo_id: repo_id, ai_generated_code: ai_generated_code, reached_prod: reached_prod}
 
   - name: ai_usage
     type: csv
     entity: ai_usage_event
-    path: data/ai_usage.csv
+    path: ai_usage.csv
     field_map: {id: event_id, person_id: person_id, tool: tool, occurred_at: occurred_at, accepted_output: accepted_output}
 
   - name: ai_seats
     type: csv
     entity: ai_seat
-    path: data/ai_seats.csv
+    path: ai_seats.csv
     field_map: {person_id: person_id, tool: tool, provisioned: provisioned, active_last_30d: active_last_30d}
 
   - name: billing
     type: csv
     entity: billing_record
-    path: data/billing.csv
+    path: billing.csv
     field_map: {period: period, tool: tool, division_id: division_id, amount_usd: amount_usd, active_users: active_users}
 
   - name: training
-    type: jira
+    type: csv
     entity: training_record
-    base_url: https://mycompany.atlassian.net
-    email_env: JIRA_EMAIL
-    token_env: JIRA_API_TOKEN
-    jql: 'project = ENABLE AND issuetype = "Agentic Training" AND status = Done'
-    field_map: {person_id: "fields.assignee.emailAddress", program: "fields.summary", completed_at: "fields.resolutiondate"}
+    path: training.csv
+    field_map: {person_id: person_id, program: program, completed_at: completed_at}
 
   - name: code_health
-    type: sql
+    type: csv
     entity: code_health_snapshot
-    connection_env: WAREHOUSE_URL
-    query: >
-      SELECT repo_id, snapshot_at, test_coverage_pct, complexity_score,
-             dead_code_pct, dependency_freshness_pct, doc_coverage_pct
-      FROM analytics.stg_codebase_health
-      WHERE snapshot_at >= :since
-    params: {since: "2026-04-01"}
+    path: code_health.csv
+    field_map: {repo_id: repo_id, snapshot_at: snapshot_at, test_coverage_pct: test_coverage_pct, complexity_score: complexity_score, dead_code_pct: dead_code_pct, dependency_freshness_pct: dependency_freshness_pct, doc_coverage_pct: doc_coverage_pct}
 
 metrics:
-  # Teams smaller than this are suppressed in the team-level drilldown — name and
-  # headcount only, no computed metrics — because a team's "average" stops being a
-  # team average and starts being de facto per-person data once the team is this
-  # small. 3 is a reasonable floor for most orgs; raise it if your teams run larger
-  # and you want more headroom, but don't lower it to see more teams "light up."
-  min_team_size: 3
-
+  min_team_size: 2
   levels:
     - {n: 1, name: Exploring}
     - {n: 2, name: Piloting}
@@ -171,25 +133,15 @@ metrics:
       level_thresholds:
         composite_score: {direction: higher, bounds: [0, 40, 55, 70]}
 
-# Optional, off by default. When absent (or enabled: false), nothing here is imported
-# and called, no network call happens, and no API key is required — see
-# framework/insights/ and framework/metrics/gap_analysis.py for how this actually
-# works: a deterministic, no-LLM step picks the single highest-leverage metric per
-# scope, and the model's only job is to phrase that already-computed fact set into two
-# sentences of prose. It never sees raw data and never decides what's true.
-#
-# insights:
-#   enabled: true
-#   provider: anthropic          # or: openai — see framework/insights/PROVIDER_REGISTRY
-#   model: "claude-sonnet-4-5-20250929"
-#   api_key_env: ANTHROPIC_API_KEY   # name of the env var holding the key, never the key itself
-#   max_tokens: 200
-#   # Optional, config-authored hints folded into the prompt as advisory context —
-#   # not a template the model has to follow verbatim.
-#   suggestions:
-#     credit_utilization_pct: "Push provisioned-but-idle seats toward active use before adding more seats"
-#     ai_test_pr_pct: "Add an AI-authored-test requirement to the PR template for this repo group"
+insights:
+  enabled: true
+  provider: anthropic
+  model: "claude-test-model"
+  api_key_env: FAKE_TEST_ANTHROPIC_KEY
+  max_tokens: 100
+  suggestions:
+    weekly_active_usage: "Pair AI-skeptical engineers with a teammate who already uses it daily."
 
 output:
-  json: out/metrics.json
-  dashboard_data_js: out/dashboard_data.js
+  json: out/test_insights_metrics.json
+  dashboard_data_js: out/test_insights_dashboard_data.js

@@ -154,6 +154,7 @@ def _compute_scope_dims(config: Config, store: Store, division_id, team, cur_sta
             "trend": _trend(level_cur, level_prior),
             "m": rows,
             "insufficientData": level_cur is None,
+            "raw": values_cur,   # see the comment on the org-level "raw" field above
         }
     return out
 
@@ -205,6 +206,11 @@ def compute(config: Config, store: Store) -> dict:
             "orgTrend": _trend(org_level_cur, org_level_prior),
             "orgHi": _highlight(dim, org_values_cur),
             "insufficientData": org_level_cur is None,
+            # Raw (unformatted) current-period values, keyed by metric name. Not used by
+            # the dashboard's own rendering — kept so the gap-analysis step (see
+            # framework/metrics/gap_analysis.py) can compute distance-to-next-level
+            # without re-running every metric formula a second time.
+            "raw": org_values_cur,
         })
 
     divisions_out = []

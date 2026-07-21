@@ -39,6 +39,25 @@ class DimensionConfig:
 
 
 @dataclass
+class InsightsConfig:
+    """Opt-in, off by default. When disabled, nothing in framework/insights/ is ever
+    imported-and-called, no network call happens, and no API key is required — the
+    pipeline behaves exactly as it did before this feature existed.
+
+    `suggestions` is optional, config-authored, per-metric hint text (e.g.
+    {"credit_utilization_pct": "Push provisioned-but-idle seats toward active use before
+    adding more seats"}) folded into the prompt alongside the computed gap. It's advisory
+    context for the model, not a template it's required to follow verbatim.
+    """
+    enabled: bool = False
+    provider: str = "anthropic"    # anthropic | openai — see framework/insights/PROVIDER_REGISTRY
+    model: str = ""
+    api_key_env: str = ""
+    max_tokens: int = 200
+    suggestions: dict = field(default_factory=dict)
+
+
+@dataclass
 class Config:
     org_name: str
     period_current: str
@@ -51,6 +70,7 @@ class Config:
     min_team_size: int = 3         # teams smaller than this are suppressed in team-level output,
                                     # not computed — a 1-2 person "team average" is de facto per-person
                                     # data, which this framework's governance stance rules out.
+    insights: InsightsConfig = field(default_factory=InsightsConfig)
     raw: dict = field(default_factory=dict)
 
     def division_ids(self):
@@ -105,6 +125,20 @@ def load_config(path: str) -> Config:
             level_thresholds=dim.get("level_thresholds", {}),
         ))
 
+    insights_raw = raw.get("insights") or {}
+    insights = InsightsConfig(
+        enabled=bool(insights_raw.get("enabled", False)),
+        provider=insights_raw.get("provider", "anthropic"),
+        model=insights_raw.get("model", ""),
+        api_key_env=insights_raw.get("api_key_env", ""),
+        max_tokens=insights_raw.get("max_tokens", 200),
+        suggestions=insights_raw.get("suggestions", {}),
+    )
+    if insights.enabled:
+        for required in ("model", "api_key_env"):
+            if not getattr(insights, required):
+                raise ConfigError(f"insights.enabled is true but insights.{required} is missing")
+
     return Config(
         org_name=org["name"],
         period_current=org["period_current"],
@@ -115,5 +149,6 @@ def load_config(path: str) -> Config:
         levels=metrics_raw.get("levels", []),
         output=output,
         min_team_size=metrics_raw.get("min_team_size", 3),
+        insights=insights,
         raw=raw,
     )
